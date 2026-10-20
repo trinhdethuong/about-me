@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô Phỏng: Ảnh hưởng của Chất xúc tác đến Tốc độ phản ứng</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; overflow: hidden; }
+        
+        .glass-panel { 
+            background: rgba(30, 41, 59, 0.75); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border-radius: 1rem; 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .btn-action { transition: all 0.2s ease; }
+        .btn-action:active { transform: scale(0.95); }
+        .btn-action:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(80%); transform: none; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 20px; width: 20px;
+            border-radius: 50%; background: #a855f7; cursor: pointer;
+            margin-top: -7px; box-shadow: 0 0 10px rgba(168, 85, 247, 0.8);
+            border: 2px solid white;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 6px; cursor: pointer;
+            background: linear-gradient(to right, #475569, #a855f7, #7e22ce);
+            border-radius: 3px; border: 1px solid #1e293b;
+        }
+        
+        input[type=range].heat-slider::-webkit-slider-thumb { background: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
+        input[type=range].heat-slider::-webkit-slider-runnable-track { background: linear-gradient(to right, #475569, #ef4444, #b91c1c); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        .modal { opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 50; }
+        .modal.active { opacity: 1; pointer-events: auto; }
+        
+        .pulse-text { animation: pulseText 2s infinite; }
+        @keyframes pulseText { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col">
+
+    <header class="bg-slate-900 border-b border-slate-700 p-4 flex justify-between items-center z-10 shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-purple-500/20 p-2 rounded-lg border border-purple-500/30 text-purple-400">
+                <i class="fas fa-magic text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-white">Ảnh hưởng của Chất xúc tác đến Tốc độ phản ứng</h1>
+                <p class="text-xs text-slate-400">Nhiệt phân KClO₃ (Có và Không có MnO₂)</p>
+            </div>
+        </div>
+        
+        <div class="bg-slate-800 px-5 py-2 rounded-xl border border-slate-700 flex items-center shadow-inner gap-3">
+            <i class="far fa-clock text-purple-400 text-xl"></i>
+            <span id="timerDisplay" class="font-mono text-2xl font-bold text-purple-300">00.0s</span>
+        </div>
+    </header>
+
+    <main class="flex-1 flex p-4 gap-4 overflow-hidden relative">
+        
+        <!-- Left: Canvas (Macro View) -->
+        <div class="glass-panel w-7/12 flex flex-col relative rounded-2xl overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800 to-slate-950">
+            <div class="absolute top-4 left-0 w-full flex justify-around z-10 pointer-events-none">
+                <div class="bg-slate-900/80 backdrop-blur px-5 py-2 rounded-lg border border-slate-600 text-center shadow-lg w-5/12">
+                    <span class="text-sm font-bold text-slate-300">Hệ 1: KClO₃ nguyên chất</span><br>
+                    <span class="text-xs text-slate-500">(Không xúc tác)</span>
+                </div>
+                <div class="bg-purple-900/40 backdrop-blur px-5 py-2 rounded-lg border border-purple-500/50 text-center shadow-[0_0_15px_rgba(168,85,247,0.2)] w-5/12">
+                    <span class="text-sm font-bold text-purple-300">Hệ 2: KClO₃ + MnO₂</span><br>
+                    <span class="text-xs text-purple-400/70">(Có chất xúc tác)</span>
+                </div>
+            </div>
+            
+            <div class="flex-1 w-full h-full relative flex items-center justify-center">
+                <canvas id="labCanvas" class="w-full h-full absolute inset-0"></canvas>
+            </div>
+            
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900/90 backdrop-blur border border-slate-600 p-2.5 rounded-xl shadow-2xl flex gap-2">
+                <button id="btnStart" class="btn-action bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-[0_0_15px_rgba(147,51,234,0.4)] flex items-center">
+                    <i class="fas fa-fire mr-2"></i>Bật đèn cồn
+                </button>
+                <button id="btnPause" class="btn-action bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-2 rounded-lg font-bold flex items-center" disabled>
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button id="btnReset" class="btn-action bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg font-bold flex items-center">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Right: Controls & Data -->
+        <div class="w-5/12 flex flex-col gap-4">
+            
+            <div class="glass-panel p-5 border-t-4 border-t-purple-500 flex flex-col gap-4">
+                <!-- Heat Control -->
+                <div>
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="font-bold text-sm text-slate-200"><i class="fas fa-thermometer-half mr-2 text-red-400"></i>Nhiệt độ đèn cồn</span>
+                        <span class="font-mono text-red-400 font-bold" id="tempDisplay">Thấp</span>
+                    </div>
+                    <input type="range" id="heatSlider" class="heat-slider" min="0" max="100" value="30">
+                </div>
+                
+                <!-- Catalyst Control -->
+                <div>
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="font-bold text-sm text-slate-200"><i class="fas fa-cubes mr-2 text-purple-400"></i>Lượng xúc tác MnO₂ (Hệ 2)</span>
+                        <span class="font-mono text-purple-400 font-bold" id="catDisplay">Tiêu chuẩn</span>
+                    </div>
+                    <input type="range" id="catSlider" min="1" max="5" value="3">
+                </div>
+            </div>
+
+            <div class="glass-panel p-4 bg-slate-800/50 text-center">
+                <div class="font-serif text-lg tracking-wide text-slate-200">
+                    2KClO₃ <span class="text-xs align-bottom text-slate-400">(r)</span> 
+                    <span class="mx-2 text-purple-400 inline-flex flex-col items-center leading-none align-middle relative top-[-4px]">
+                        <span class="text-[0.6rem] font-sans font-bold">t°, MnO₂</span>
+                        <span>&rarr;</span>
+                    </span> 
+                    2KCl <span class="text-xs align-bottom text-slate-400">(r)</span> + 
+                    3<strong class="text-blue-400">O₂ &uarr;</strong>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button id="btnEnergy" class="btn-action bg-orange-600/80 hover:bg-orange-500 border border-orange-400 text-white p-3 rounded-xl font-semibold shadow flex flex-col items-center justify-center gap-1">
+                    <i class="fas fa-chart-area text-xl"></i>
+                    <span class="text-xs">Biểu đồ Năng lượng</span>
+                </button>
+                <button id="btnMolecular" class="btn-action bg-indigo-600/80 hover:bg-indigo-500 border border-indigo-400 text-white p-3 rounded-xl font-semibold shadow flex flex-col items-center justify-center gap-1">
+                    <i class="fas fa-atom text-xl"></i>
+                    <span class="text-xs">Mô phỏng Phân tử</span>
+                </button>
+            </div>
+
+            <div class="glass-panel flex-1 flex flex-col overflow-hidden border-t-4 border-t-blue-500">
+                <div class="p-3 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-blue-400"><i class="fas fa-flask mr-2"></i>Dữ liệu thu khí O₂</h2>
+                    <div class="flex gap-2">
+                        <button id="btnExplain" class="text-xs bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded shadow pulse-text">Kết luận</button>
+                        <button id="btnQuiz" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded shadow">Thử thách mở khóa</button>
+                    </div>
+                </div>
+                
+                <div class="p-4 bg-slate-900/40 flex-1 overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="text-slate-500 text-xs border-b border-slate-700">
+                            <tr>
+                                <th class="text-left pb-2 font-medium">Chỉ số</th>
+                                <th class="text-center pb-2 font-medium">Hệ 1 (Không MnO₂)</th>
+                                <th class="text-center pb-2 font-medium text-purple-400">Hệ 2 (Có MnO₂)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700/50">
+                            <tr>
+                                <td class="py-3 text-slate-400">Năng lượng hoạt hoá (Ea)</td>
+                                <td class="py-3 text-center text-red-400 font-bold">Rất Cao</td>
+                                <td class="py-3 text-center text-green-400 font-bold">Thấp</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 text-slate-400">Tốc độ sinh khí</td>
+                                <td class="py-3 text-center font-mono text-slate-300" id="rate1">0.00</td>
+                                <td class="py-3 text-center font-mono text-purple-300 font-bold" id="rate2">0.00</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 text-slate-400" colspan="3">
+                                    <div class="flex justify-between mb-1 text-xs">
+                                        <span>Thể tích O₂ thu được (Hệ 1)</span>
+                                        <span id="vol1Pct" class="font-mono text-slate-300">0.0%</span>
+                                    </div>
+                                    <div class="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden mb-3">
+                                        <div id="barVol1" class="h-full bg-slate-400 transition-all duration-100 w-0"></div>
+                                    </div>
+                                    
+                                    <div class="flex justify-between mb-1 text-xs">
+                                        <span class="text-purple-300">Thể tích O₂ thu được (Hệ 2)</span>
+                                        <span id="vol2Pct" class="font-mono text-purple-400 font-bold">0.0%</span>
+                                    </div>
+                                    <div class="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                        <div id="barVol2" class="h-full bg-gradient-to-r from-purple-500 to-blue-400 transition-all duration-100 w-0 shadow-[0_0_8px_rgba(168,85,247,0.6)]"></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+
+    <!-- Modal: Quiz -->
+    <div id="modalQuiz" class="modal fixed inset-0 bg-slate-950/90 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+        <div class="bg-slate-800 rounded-2xl w-full max-w-3xl border border-emerald-500/40 shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-emerald-700 to-teal-600 p-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white"><i class="fas fa-unlock-alt mr-2"></i>Thử thách mở khóa thông tin về tôi</h2>
+                <button class="close-modal text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-6">
+                <p class="text-slate-300 mb-5">
+                    Trả lời 5 câu hỏi về thí nghiệm. Bạn cần đạt <b class="text-emerald-400">ít nhất 4/5 điểm</b> để mở khóa phần <b class="text-purple-300">Thông tin về tôi</b>.
+                </p>
+
+                <form id="quizForm" class="space-y-5">
+                    <div class="bg-slate-900/60 p-4 rounded-xl">
+                        <p class="font-semibold text-white mb-2">1. Chất xúc tác được sử dụng trong thí nghiệm là gì?</p>
+                        <label class="block mb-1"><input type="radio" name="q1" value="A" class="mr-2"> KCl</label>
+                        <label class="block mb-1"><input type="radio" name="q1" value="B" class="mr-2"> MnO₂</label>
+                        <label class="block"><input type="radio" name="q1" value="C" class="mr-2"> O₂</label>
+                    </div>
+
+                    <div class="bg-slate-900/60 p-4 rounded-xl">
+                        <p class="font-semibold text-white mb-2">2. Hệ nào tạo khí oxygen nhanh hơn?</p>
+                        <label class="block mb-1"><input type="radio" name="q2" value="A" class="mr-2"> Hệ 1: KClO₃ nguyên chất</label>
+                        <label class="block mb-1"><input type="radio" name="q2" value="B" class="mr-2"> Hai hệ như nhau</label>
+                        <label class="block"><input type="radio" name="q2" value="C" class="mr-2"> Hệ 2: KClO₃ + MnO₂</label>
+                    </div>
+
+                    <div class="bg-slate-900/60 p-4 rounded-xl">
+                        <p class="font-semibold text-white mb-2">3. Chất xúc tác làm thay đổi yếu tố nào?</p>
+                        <label class="block mb-1"><input type="radio" name="q3" value="A" class="mr-2"> Làm giảm năng lượng hoạt hóa</label>
+                        <label class="block mb-1"><input type="radio" name="q3" value="B" class="mr-2"> Làm tăng khối lượng sản phẩm tối đa</label>
+                        <label class="block"><input type="radio" name="q3" value="C" class="mr-2"> Làm thay đổi bản chất chất phản ứng</label>
+                    </div>
+
+                    <div class="bg-slate-900/60 p-4 rounded-xl">
+                        <p class="font-semibold text-white mb-2">4. Phản ứng phân hủy KClO₃ tạo ra khí nào?</p>
+                        <label class="block mb-1"><input type="radio" name="q4" value="A" class="mr-2"> H₂</label>
+                        <label class="block mb-1"><input type="radio" name="q4" value="B" class="mr-2"> CO₂</label>
+                        <label class="block"><input type="radio" name="q4" value="C" class="mr-2"> O₂</label>
+                    </div>
+
+                    <div class="bg-slate-900/60 p-4 rounded-xl">
+                        <p class="font-semibold text-white mb-2">5. Nhận định nào đúng về chất xúc tác?</p>
+                        <label class="block mb-1"><input type="radio" name="q5" value="A" class="mr-2"> Bị tiêu hao hoàn toàn sau phản ứng</label>
+                        <label class="block mb-1"><input type="radio" name="q5" value="B" class="mr-2"> Làm tăng tốc độ phản ứng và không bị tiêu hao về chất</label>
+                        <label class="block"><input type="radio" name="q5" value="C" class="mr-2"> Chỉ có tác dụng ở nhiệt độ thường</label>
+                    </div>
+
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl">
+                        <i class="fas fa-check mr-2"></i>Nộp bài và kiểm tra điểm
+                    </button>
+                </form>
+
+                <div id="quizResult" class="hidden mt-5 p-4 rounded-xl text-center"></div>
+                <div id="unlockBox" class="hidden mt-4 p-6 rounded-2xl bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-400/50 shadow-lg">
+                    <div class="text-center mb-5">
+                        <div class="text-5xl mb-2">🔓</div>
+                        <h3 class="text-2xl font-bold text-purple-200">Đã mở khóa thông tin về tôi!</h3>
+                        <p class="text-purple-300/80 mt-1">Cảm ơn bạn đã hoàn thành thử thách 🥰</p>
+                    </div>
+
+                    <div class="bg-slate-900/60 rounded-2xl p-5 border border-white/10">
+                        <h4 class="text-xl font-bold text-white mb-4">🌷 Xin chào, mình là Phương Trinh</h4>
+
+                        <div class="space-y-3 text-slate-200 leading-relaxed">
+                            <p>
+                                Hiện mình là sinh viên ngành
+                                <strong class="text-purple-300">Sư phạm Khoa học Tự nhiên</strong>
+                                – <strong class="text-purple-300">Trường Đại học Sư phạm TP.HCM</strong>.
+                            </p>
+
+                            <div class="grid sm:grid-cols-2 gap-3 mt-4">
+                                <div class="bg-slate-800/70 rounded-xl p-3">
+                                    <span class="text-xs text-slate-400 block mb-1">Mã số sinh viên</span>
+                                    <strong class="text-white">50.01.401.233</strong>
+                                </div>
+                                <div class="bg-slate-800/70 rounded-xl p-3">
+                                    <span class="text-xs text-slate-400 block mb-1">Email sinh viên</span>
+                                    <strong class="text-white break-all">5001401233@student.hcmue.edu.vn</strong>
+                                </div>
+                            </div>
+
+                            <p class="mt-4">
+                                Mình yêu thích <strong class="text-pink-300">khoa học</strong>,
+                                <strong class="text-pink-300">giáo dục</strong> và những hoạt động
+                                <strong class="text-pink-300">học tập sáng tạo</strong>.
+                            </p>
+
+                            <p>
+                                Đây là một góc nhỏ để mình chia sẻ hành trình học tập
+                                và phát triển bản thân. ✨
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Conclusion -->
+    <div id="modalConclusion" class="modal fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+        <div class="bg-slate-800 rounded-2xl w-full max-w-2xl border border-slate-600 shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300">
+            <div class="bg-gradient-to-r from-purple-600 to-purple-500 p-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white"><i class="fas fa-check-circle mr-2"></i>Kết Luận Khoa Học</h2>
+                <button class="close-modal text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-6">
+                <div class="bg-slate-900/80 p-5 rounded-xl border-l-4 border-purple-500 mb-4 shadow-inner">
+                    <p class="text-lg leading-relaxed text-slate-200">
+                        "Chất xúc tác MnO₂ tham gia vào quá trình phản ứng tạo ra một con đường phản ứng mới có <strong class="text-green-400">năng lượng hoạt hoá thấp hơn</strong> rất nhiều so với phản ứng ban đầu. Nhờ đó, số lượng phân tử KClO₃ có đủ năng lượng để vượt qua rào cản năng lượng tăng lên đáng kể, dẫn đến <strong class="text-purple-400">tốc độ phản ứng tăng mạnh</strong>."
+                    </p>
+                </div>
+                <ul class="text-sm text-slate-400 space-y-2 list-disc pl-5">
+                    <li>Chất xúc tác làm tăng tốc độ phản ứng nhưng không bị tiêu hao về chất và lượng sau phản ứng.</li>
+                    <li>Ở nhiệt độ thường, KClO₃ phân huỷ rất chậm. Khi có MnO₂, bọt khí O₂ sinh ra mãnh liệt ngay cả khi nhiệt độ đun nóng chưa quá cao.</li>
+                </ul>
+                <div class="mt-6 text-center">
+                    <button class="close-modal bg-slate-700 hover:bg-slate-600 text-white px-8 py-2 rounded-lg font-semibold transition">Đã hiểu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Energy Chart Modal -->
+    <div id="modalEnergy" class="modal fixed inset-0 bg-slate-900/90 backdrop-blur flex justify-center items-center p-4 z-50">
+        <div class="bg-slate-800 rounded-2xl w-full max-w-3xl border border-slate-600 shadow-2xl overflow-hidden h-[70vh] flex flex-col">
+            <div class="bg-orange-600 p-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white"><i class="fas fa-chart-area mr-2"></i>Biểu đồ Năng lượng Hoạt hoá (Ea)</h2>
+                <button class="close-modal text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div class="flex-1 relative p-6 flex flex-col justify-center items-center bg-slate-950">
+                <canvas id="energyCanvas" class="w-full h-full max-h-[400px]"></canvas>
+                <div class="mt-4 flex gap-6 text-sm">
+                    <span class="flex items-center text-slate-400"><div class="w-4 h-1 bg-slate-500 mr-2"></div> Không xúc tác (Ea cao)</span>
+                    <span class="flex items-center text-purple-400"><div class="w-4 h-1 bg-purple-500 mr-2 shadow-[0_0_5px_#a855f7]"></div> Có xúc tác MnO₂ (Ea thấp)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Micro Modal -->
+    <div id="modalMicro" class="modal fixed inset-0 bg-slate-900/90 backdrop-blur flex justify-center items-center p-4 z-50">
+        <div class="bg-slate-800 rounded-2xl w-full max-w-4xl border border-slate-600 shadow-2xl overflow-hidden h-[80vh] flex flex-col">
+            <div class="bg-indigo-600 p-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white"><i class="fas fa-microscope mr-2"></i>Mô phỏng Phân tử trên Bề mặt Xúc tác</h2>
+                <button class="close-modal text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div class="flex-1 relative flex">
+                <div class="w-1/2 border-r border-slate-700 relative">
+                    <div class="absolute top-2 left-0 w-full text-center text-slate-400 font-bold z-10">Hệ 1: Phân huỷ tự do (Chậm)</div>
+                    <canvas id="microCanvas1" class="w-full h-full absolute inset-0 bg-slate-900"></canvas>
+                </div>
+                <div class="w-1/2 relative">
+                    <div class="absolute top-2 left-0 w-full text-center text-purple-400 font-bold z-10">Hệ 2: Phân huỷ trên MnO₂ (Nhanh)</div>
+                    <canvas id="microCanvas2" class="w-full h-full absolute inset-0 bg-slate-950"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- STATE & PHYSICS ---
+        const state = {
+            isRunning: false,
+            isPaused: false,
+            timeElapsed: 0,
+            lastFrameTime: 0,
+            
+            heatLevel: 30, // 0 to 100
+            catalystAmount: 3, // 1 to 5
+            
+            sys1: { vol: 0, rate: 0, bubbles: [] }, // No catalyst
+            sys2: { vol: 0, rate: 0, bubbles: [] }  // With catalyst
+        };
+
+        const DOM = {
+            canvas: document.getElementById('labCanvas'),
+            heatSlider: document.getElementById('heatSlider'),
+            catSlider: document.getElementById('catSlider'),
+            tempDisplay: document.getElementById('tempDisplay'),
+            catDisplay: document.getElementById('catDisplay'),
+            timerDisplay: document.getElementById('timerDisplay'),
+            
+            rate1: document.getElementById('rate1'),
+            rate2: document.getElementById('rate2'),
+            vol1Pct: document.getElementById('vol1Pct'),
+            vol2Pct: document.getElementById('vol2Pct'),
+            barVol1: document.getElementById('barVol1'),
+            barVol2: document.getElementById('barVol2'),
+            
+            btnStart: document.getElementById('btnStart'),
+            btnPause: document.getElementById('btnPause'),
+            btnReset: document.getElementById('btnReset')
+        };
+
+        const ctx = DOM.canvas.getContext('2d');
+
+        // Resize Canvas dynamically
+        function resizeCanvases() {
+            let parentRect = DOM.canvas.parentElement.getBoundingClientRect();
+            DOM.canvas.width = parentRect.width;
+            DOM.canvas.height = parentRect.height;
+            renderScene();
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        // --- BUBBLE SYSTEM ---
+        function spawnBubble(system, startX, startY, count) {
+            for(let i=0; i<count; i++) {
+                system.bubbles.push({
+                    x: startX + (Math.random() - 0.5) * 6,
+                    y: startY,
+                    r: 1.5 + Math.random() * 2,
+                    vx: (Math.random() - 0.5) * 0.4,
+                    vy: -(35 + Math.random() * 25),
+                    wobble: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function updateBubbles(system, dtSec, waterLevelY) {
+            for (let i = system.bubbles.length - 1; i >= 0; i--) {
+                let b = system.bubbles[i];
+                b.y += b.vy * dtSec;
+                b.x += Math.sin(state.timeElapsed * 6 + b.wobble) * 0.4;
+                
+                // Biến mất khi chạm tới mực nước dâng xuống phía trên ống thu khí
+                if (b.y < waterLevelY) {
+                    system.bubbles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawBubbles(systemContext, bubbles) {
+            systemContext.fillStyle = 'rgba(255, 255, 255, 0.65)';
+            systemContext.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            systemContext.lineWidth = 0.5;
+            bubbles.forEach(b => {
+                systemContext.beginPath();
+                systemContext.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+                systemContext.fill();
+                systemContext.stroke();
+            });
+        }
+
+        // --- DRAWING LAB EQUIPMENT ---
+        function drawSetup(offsetX, cy, isCatalyzed) {
+            // Toạ độ ống nghiệm đun nóng
+            const tubeLength = 150;
+            const tubeAngle = 0.25; // Hơi chúc xuống
+            const tubeCenterX = offsetX - 60;
+            const tubeCenterY = cy - 30; 
+            
+            // Chậu & Ống thu khí
+            const troughX = offsetX + 100;
+            const troughY = cy + 40; 
+            const collTubeWidth = 34;
+            const collTubeHeight = 150;
+            
+            // Trục giá đỡ và Đèn cồn
+            const standPoleX = offsetX - 10;
+            const standBaseY = cy + 80; 
+            
+            // Xác định chính xác vị trí đèn cồn đặt dưới đáy ống nghiệm
+            const bottomOfTubeX = tubeCenterX - 65 * Math.cos(tubeAngle);
+            const burnerX = bottomOfTubeX;
+            const burnerY = standBaseY - 35; // Đèn cồn đặt sát lên bệ đỡ
+
+            // ==========================================
+            // 1. CHÂN ĐẾ & TRỤC GIÁ ĐỠ (Background)
+            // ==========================================
+            // Chân đế phẳng
+            ctx.fillStyle = '#334155';
+            ctx.beginPath();
+            ctx.roundRect(burnerX - 35, standBaseY, (standPoleX + 30) - (burnerX - 35), 14, 4);
+            ctx.fill();
+
+            // Trục sắt đứng
+            let gradRod = ctx.createLinearGradient(standPoleX, cy - 140, standPoleX + 8, cy - 140);
+            gradRod.addColorStop(0, '#94a3b8');
+            gradRod.addColorStop(0.5, '#f8fafc');
+            gradRod.addColorStop(1, '#475569');
+            ctx.fillStyle = gradRod;
+            ctx.fillRect(standPoleX, cy - 140, 8, standBaseY - (cy - 140)); 
+
+            // ==========================================
+            // 2. ĐÈN CỒN (Đặt thẳng trên bệ đỡ)
+            // ==========================================
+            ctx.fillStyle = '#851c1c';
+            ctx.beginPath();
+            ctx.roundRect(burnerX - 22, burnerY, 44, 35, 4);
+            ctx.fill();
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.beginPath();
+            ctx.arc(burnerX, burnerY - 12, 22, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.4)';
+            ctx.beginPath();
+            ctx.arc(burnerX, burnerY - 12, 20, 0, Math.PI);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(burnerX, burnerY - 12);
+            ctx.lineTo(burnerX, burnerY - 40);
+            ctx.stroke();
+            
+            if (state.isRunning) {
+                ctx.save();
+                ctx.translate(burnerX, burnerY - 40);
+                let flicker = Math.sin(state.timeElapsed * 22) * 1.5;
+                let scale = 0.65 + (state.heatLevel / 100) * 0.7;
+                ctx.scale(scale, scale);
+                
+                ctx.fillStyle = 'rgba(249, 115, 22, 0.6)';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.quadraticCurveTo(-12 + flicker, -18, 0, -42 - Math.random()*4);
+                ctx.quadraticCurveTo(12 - flicker, -18, 0, 0);
+                ctx.fill();
+                
+                ctx.fillStyle = 'rgba(253, 224, 71, 0.9)';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.quadraticCurveTo(-6 + flicker*0.5, -8, 0, -22);
+                ctx.quadraticCurveTo(6 - flicker*0.5, -8, 0, 0);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // ==========================================
+            // 3. KẸP ỐNG NGHIỆM ĐUN NÓNG (Nửa sau/Dưới)
+            // ==========================================
+            const clampOffsetX = 35; // Nằm ở 1/3 thân trên ống nghiệm
+            const clampX = tubeCenterX + clampOffsetX * Math.cos(tubeAngle);
+            const clampY = tubeCenterY + clampOffsetX * Math.sin(tubeAngle);
+
+            // Bosshead nối cột
+            ctx.fillStyle = '#475569';
+            ctx.beginPath();
+            ctx.roundRect(standPoleX - 4, clampY - 8, 16, 16, 2);
+            ctx.fill();
+            
+            // Thanh nối ngang
+            ctx.fillStyle = '#64748b';
+            ctx.fillRect(clampX, clampY - 3, standPoleX - clampX, 6);
+            
+            // Ngàm kẹp dưới phẳng
+            ctx.save();
+            ctx.translate(clampX, clampY);
+            ctx.rotate(tubeAngle);
+            ctx.fillStyle = '#475569';
+            ctx.beginPath();
+            ctx.roundRect(-8, 0, 16, 16, 2);
+            ctx.fill();
+            ctx.restore();
+
+            // ==========================================
+            // 4. ỐNG NGHIỆM ĐUN NÓNG
+            // ==========================================
+            ctx.save();
+            ctx.translate(tubeCenterX, tubeCenterY);
+            ctx.rotate(tubeAngle);
+            
+            // Chất rắn (Xám đậm nếu có xúc tác)
+            ctx.fillStyle = isCatalyzed ? '#475569' : '#f8fafc'; 
+            ctx.beginPath();
+            ctx.roundRect(-tubeLength/2 + 5, 2, 45, 11, 3);
+            ctx.fill();
+            if(!isCatalyzed) {
+                 ctx.strokeStyle = '#cbd5e1';
+                 ctx.lineWidth = 0.5;
+                 ctx.stroke();
+            }
+
+            // Bông gòn
+            ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
+            ctx.beginPath();
+            ctx.roundRect(tubeLength/2 - 32, -12, 18, 24, 3);
+            ctx.fill();
+            
+            // Kính ống nghiệm
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(tubeLength/2, -14);
+            ctx.lineTo(-tubeLength/2 + 14, -14);
+            ctx.arc(-tubeLength/2 + 14, 0, 14, -Math.PI/2, Math.PI/2, true);
+            ctx.lineTo(tubeLength/2, 14);
+            ctx.stroke();
+
+            // Nút cao su
+            ctx.fillStyle = '#3f1a04';
+            ctx.beginPath();
+            ctx.moveTo(tubeLength/2 - 3, -14);
+            ctx.lineTo(tubeLength/2 + 7, -15);
+            ctx.lineTo(tubeLength/2 + 7, 15);
+            ctx.lineTo(tubeLength/2 - 3, 14);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.fillRect(tubeLength/2 + 2, -2, 12, 4);
+            ctx.restore();
+
+            // ==========================================
+            // 5. KẸP ỐNG NGHIỆM ĐUN NÓNG (Nửa trước/Trên)
+            // ==========================================
+            ctx.save();
+            ctx.translate(clampX, clampY);
+            ctx.rotate(tubeAngle);
+            
+            // Ngàm đè phía trên
+            ctx.fillStyle = '#475569'; 
+            ctx.beginPath();
+            ctx.roundRect(-8, -16, 16, 6, 2);
+            ctx.fill();
+            
+            // Trục vít vặn thẳng đứng nối ngàm trên và dưới
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(-2, -18, 4, 38);
+            ctx.restore();
+
+            // ==========================================
+            // 6. ỐNG DẪN KHÍ
+            // ==========================================
+            let exitX = tubeCenterX + (tubeLength/2 + 10) * Math.cos(tubeAngle);
+            let exitY = tubeCenterY + (tubeLength/2 + 10) * Math.sin(tubeAngle);
+            
+            ctx.strokeStyle = '#dc2626'; 
+            ctx.lineWidth = 8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(exitX, exitY);
+            let rubberEndX = exitX + 15 * Math.cos(tubeAngle);
+            let rubberEndY = exitY + 15 * Math.sin(tubeAngle);
+            ctx.lineTo(rubberEndX, rubberEndY);
+            ctx.stroke();
+
+            let hookBottomY = troughY + 65; 
+            let hookUpY = troughY + 30; 
+            let dropX = rubberEndX + 35; 
+            let hookX = troughX; // FIXED: hookX defined for curves
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 4.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(rubberEndX, rubberEndY);
+            
+            // 3 khúc cong
+            ctx.arcTo(dropX, rubberEndY + (dropX - rubberEndX)*Math.tan(tubeAngle), dropX, hookBottomY, 15);
+            ctx.arcTo(dropX, hookBottomY, hookX, hookBottomY, 15);
+            ctx.arcTo(hookX, hookBottomY, hookX, hookUpY, 10);
+            ctx.lineTo(hookX, hookUpY);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            // ==========================================
+            // 7. CHẬU NƯỚC & ỐNG THU KHÍ (HỞ ĐÁY)
+            // ==========================================
+            let sys = isCatalyzed ? state.sys2 : state.sys1;
+            let currentVol = sys.vol;
+            
+            let collTubeY = troughY - 100;
+            let openBottomY = troughY + 50; 
+            let actualTubeHeight = openBottomY - collTubeY;
+            
+            let waterStartTop = collTubeY + 16; 
+            let maxWaterDrop = actualTubeHeight - 20; 
+            let currentWaterLevelY = waterStartTop + (currentVol / 100) * maxWaterDrop;
+            
+            if (currentWaterLevelY < openBottomY) {
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.35)'; 
+                ctx.fillRect(troughX - collTubeWidth/2 + 2, currentWaterLevelY, collTubeWidth - 4, openBottomY - currentWaterLevelY);
+            }
+
+            if(state.isRunning || state.isPaused) {
+                if (state.isRunning && sys.rate > 0 && currentVol < 100) {
+                     let bubbleProb = sys.rate * 0.04; 
+                     let count = Math.floor(bubbleProb);
+                     if (Math.random() < (bubbleProb % 1)) count++;
+                     spawnBubble(sys, hookX, hookUpY, count); 
+                }
+                updateBubbles(sys, 0.016, currentWaterLevelY); 
+                drawBubbles(ctx, sys.bubbles);
+            }
+
+            // Vỏ thủy tinh ống thu khí (HỞ HOÀN TOÀN ĐÁY)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(troughX - collTubeWidth/2, openBottomY); 
+            ctx.lineTo(troughX - collTubeWidth/2, collTubeY + 16); 
+            ctx.arc(troughX, collTubeY + 16, collTubeWidth/2, Math.PI, 0); 
+            ctx.lineTo(troughX + collTubeWidth/2, openBottomY); 
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.15)'; 
+            ctx.fillRect(troughX - 60, troughY, 120, 80);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(troughX - 60, troughY);
+            ctx.lineTo(troughX - 60, troughY + 80);
+            ctx.lineTo(troughX + 60, troughY + 80);
+            ctx.lineTo(troughX + 60, troughY);
+            ctx.stroke();
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(troughX - 60, troughY);
+            ctx.lineTo(troughX + 60, troughY);
+            ctx.stroke();
+        }
+
+        // TÍNH TOÁN CĂN CHỈNH ĐỘNG DỰA TRÊN KÍCH THƯỚC TRÌNH DUYỆT
+        function renderScene() {
+            const w = DOM.canvas.width;
+            const h = DOM.canvas.height;
+            if (w === 0 || h === 0) return;
+
+            ctx.clearRect(0, 0, w, h);
+            
+            const cy = h / 2;
+            const leftX = w * 0.25;  // Hệ 1
+            const rightX = w * 0.75; // Hệ 2
+            
+            drawSetup(leftX, cy, false);
+            
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(w/2, 30);
+            ctx.lineTo(w/2, h - 30);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            drawSetup(rightX, cy, true);
+        }
+
+        // --- KINETICS CALCULATIONS ---
+        function calculateRates() {
+            if (state.heatLevel > 40) {
+                state.sys1.rate = (state.heatLevel - 40) * 0.07;
+            } else if (state.heatLevel > 20) {
+                state.sys1.rate = (state.heatLevel - 20) * 0.015; 
+            } else {
+                state.sys1.rate = 0; 
+            }
+
+            if (state.heatLevel > 10) {
+                state.sys2.rate = (state.heatLevel - 10) * 0.045 * (1 + state.catalystAmount * 0.4);
+            } else {
+                state.sys2.rate = 0;
+            }
+        }
+
+        function updateSimulation(dt) {
+            if (state.sys1.vol >= 100 && state.sys2.vol >= 100) return;
+
+            let dtSec = dt / 1000;
+            state.timeElapsed += dtSec;
+            
+            calculateRates();
+            
+            if (state.sys1.vol < 100) {
+                state.sys1.vol += state.sys1.rate * dtSec * 2.5;
+                if (state.sys1.vol >= 100) state.sys1.vol = 100;
+            }
+            if (state.sys2.vol < 100) {
+                state.sys2.vol += state.sys2.rate * dtSec * 2.5;
+                if (state.sys2.vol >= 100) state.sys2.vol = 100;
+            }
+
+            updateUI();
+        }
+
+        function updateUI() {
+            DOM.timerDisplay.innerText = state.timeElapsed.toFixed(1) + "s";
+            
+            DOM.rate1.innerText = state.sys1.rate.toFixed(2);
+            DOM.rate2.innerText = state.sys2.rate.toFixed(2);
+            
+            DOM.vol1Pct.innerText = state.sys1.vol.toFixed(1) + "%";
+            DOM.vol2Pct.innerText = state.sys2.vol.toFixed(1) + "%";
+            
+            DOM.barVol1.style.width = state.sys1.vol + "%";
+            DOM.barVol2.style.width = state.sys2.vol + "%";
+            
+            if (state.sys1.vol >= 100 && state.sys2.vol >= 100 && state.isRunning) {
+                state.isRunning = false;
+                DOM.btnPause.disabled = true;
+                setTimeout(() => document.getElementById('btnExplain').click(), 1000);
+            }
+        }
+
+        function loop(timestamp) {
+            if (!state.lastFrameTime) state.lastFrameTime = timestamp;
+            const dt = timestamp - state.lastFrameTime;
+            
+            if (state.isRunning && !state.isPaused) {
+                updateSimulation(dt);
+            }
+            
+            renderScene(); 
+            
+            state.lastFrameTime = timestamp;
+            requestAnimationFrame(loop);
+        }
+
+        // --- EVENT LISTENERS ---
+        DOM.heatSlider.addEventListener('input', (e) => {
+            state.heatLevel = parseInt(e.target.value);
+            let txt = "Thấp";
+            if(state.heatLevel > 70) txt = "Rất Cao (Đỏ rực)";
+            else if (state.heatLevel > 40) txt = "Trung Bình";
+            DOM.tempDisplay.innerText = txt;
+            if(state.isRunning) calculateRates();
+        });
+
+        DOM.catSlider.addEventListener('input', (e) => {
+            if(state.isRunning) return; 
+            state.catalystAmount = parseInt(e.target.value);
+            let map = {1: "Rất ít", 2: "Ít", 3: "Tiêu chuẩn", 4: "Nhiều", 5: "Rất nhiều"};
+            DOM.catDisplay.innerText = map[state.catalystAmount];
+        });
+
+        DOM.btnStart.addEventListener('click', () => {
+            state.isRunning = true;
+            state.isPaused = false;
+            DOM.btnStart.disabled = true;
+            DOM.btnPause.disabled = false;
+            DOM.catSlider.disabled = true;
+            state.lastFrameTime = performance.now();
+        });
+
+        DOM.btnPause.addEventListener('click', () => {
+            state.isPaused = true;
+            DOM.btnStart.disabled = false;
+            DOM.btnStart.innerHTML = '<i class="fas fa-play mr-2"></i>Tiếp tục';
+            DOM.btnPause.disabled = true;
+        });
+
+        DOM.btnReset.addEventListener('click', () => {
+            state.isRunning = false;
+            state.isPaused = false;
+            state.timeElapsed = 0;
+            state.sys1 = { vol: 0, rate: 0, bubbles: [] };
+            state.sys2 = { vol: 0, rate: 0, bubbles: [] };
+            
+            DOM.btnStart.disabled = false;
+            DOM.btnStart.innerHTML = '<i class="fas fa-fire mr-2"></i>Bật đèn cồn';
+            DOM.btnPause.disabled = true;
+            DOM.catSlider.disabled = false;
+            
+            updateUI();
+            renderScene();
+        });
+
+        document.querySelectorAll('.close-modal').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.target.closest('.modal').classList.remove('active');
+            });
+        });
+
+        document.getElementById('btnExplain').addEventListener('click', () => {
+            document.getElementById('modalConclusion').classList.add('active');
+        });
+
+        document.getElementById('btnEnergy').addEventListener('click', () => {
+            document.getElementById('modalEnergy').classList.add('active');
+            drawEnergyChart();
+        });
+        
+        document.getElementById('btnMolecular').addEventListener('click', () => {
+            document.getElementById('modalMicro').classList.add('active');
+        });
+
+        // --- ENERGY CHART DRAWING ---
+        function drawEnergyChart() {
+            const canvas = document.getElementById('energyCanvas');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 350;
+            const ctxE = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctxE.clearRect(0,0,w,h);
+            
+            const pad = 40;
+            const startY = h - 100;
+            const endY = h - 40; 
+            
+            ctxE.strokeStyle = '#475569';
+            ctxE.lineWidth = 2;
+            ctxE.beginPath();
+            ctxE.moveTo(pad, pad); ctxE.lineTo(pad, h - pad); ctxE.lineTo(w - pad, h - pad);
+            ctxE.stroke();
+            
+            ctxE.fillStyle = '#94a3b8'; ctxE.font = '14px sans-serif';
+            ctxE.fillText("Năng lượng", 10, 30);
+            ctxE.fillText("Tiến trình phản ứng", w/2 - 50, h - 10);
+            
+            ctxE.fillStyle = '#f8fafc';
+            ctxE.fillText("2KClO₃", pad + 10, startY + 20);
+            ctxE.fillText("2KCl + 3O₂", w - pad - 80, endY + 20);
+            
+            ctxE.beginPath();
+            ctxE.moveTo(pad, startY);
+            ctxE.bezierCurveTo(pad + w/4, startY, w/2 - 50, 50, w/2, 50); 
+            ctxE.bezierCurveTo(w/2 + 50, 50, w*0.75, endY, w - pad, endY);
+            ctxE.strokeStyle = '#64748b'; 
+            ctxE.lineWidth = 4;
+            ctxE.stroke();
+            
+            ctxE.beginPath();
+            ctxE.moveTo(pad, startY);
+            ctxE.bezierCurveTo(pad + w/4, startY, w/2 - 50, 200, w/2, 200); 
+            ctxE.bezierCurveTo(w/2 + 50, 200, w*0.75, endY, w - pad, endY);
+            ctxE.strokeStyle = '#a855f7'; 
+            ctxE.lineWidth = 4;
+            ctxE.stroke();
+            
+            ctxE.strokeStyle = 'rgba(168, 85, 247, 0.4)';
+            ctxE.lineWidth = 8;
+            ctxE.stroke();
+        }
+
+
+        // --- QUIZ & UNLOCK SYSTEM ---
+        const quizAnswers = { q1: "B", q2: "C", q3: "A", q4: "C", q5: "B" };
+
+        document.getElementById('btnQuiz').addEventListener('click', () => {
+            document.getElementById('modalQuiz').classList.add('active');
+        });
+
+        document.getElementById('quizForm').addEventListener('submit', (event) => {
+            event.preventDefault();
+            let score = 0;
+
+            Object.keys(quizAnswers).forEach((question) => {
+                const selected = document.querySelector(`input[name="${question}"]:checked`);
+                if (selected && selected.value === quizAnswers[question]) score++;
+            });
+
+            const result = document.getElementById('quizResult');
+            const unlockBox = document.getElementById('unlockBox');
+            result.classList.remove('hidden');
+
+            if (score >= 4) {
+                result.className = 'mt-5 p-4 rounded-xl text-center bg-emerald-900/60 border border-emerald-400 text-emerald-300';
+                result.innerHTML = `<b>🎉 Bạn đạt ${score}/5 điểm!</b><br>Chính xác! Bạn đã đủ điều kiện mở khóa thông tin về tôi 🔓`;
+                unlockBox.classList.remove('hidden');
+            } else {
+                result.className = 'mt-5 p-4 rounded-xl text-center bg-red-900/60 border border-red-400 text-red-300';
+                result.innerHTML = `<b>🔒 Bạn đạt ${score}/5 điểm.</b><br>Cần ít nhất 4/5 điểm. Hãy quan sát lại mô phỏng và thử lại nhé!`;
+                unlockBox.classList.add('hidden');
+            }
+        });
+
+        // --- INIT ---
+        setTimeout(resizeCanvases, 100);
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
